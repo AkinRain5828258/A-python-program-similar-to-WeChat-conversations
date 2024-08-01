@@ -1,0 +1,21 @@
+import os
+import json
+
+# 用户信息文件路径
+users_file = 'users.json'
+
+def load_users():
+    # 从文件中加载用户信息
+    if os.path.exists(users_file):
+        with open(users_file, 'r') as f:
+            return json.load(f)
+    else:
+        return {}
+
+def save_users(users):
+    # 将用户信息保存到文件中
+    with open(users_file, 'w') as f:
+        json.dump(users, f)
+
+# 加载用户信息
+users = load_users()
