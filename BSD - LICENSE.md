@@ -1,3 +1,4 @@
+BSD License
 Copyright (c) 2024, AkinRain5828258
 All rights reserved.
 Redistribution and use in source and binary forms, with or without
