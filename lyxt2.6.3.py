@@ -309,3 +309,9 @@ def show_menu():
 
 if __name__ == "__main__":
     show_menu()
+"""
+this a py
+It's by AkinRain5828258 when study atmiddle school
+THANK FOR YOU USE MU PY
+Wishing you a good morning, a good noon, and a good evening
+"""
