@@ -2,26 +2,35 @@ import os
 import json
 import uuid
 import datetime
+import hashlib
 
 # 用户信息文件路径
 users_file = 'users.json'
 
+def hash_password(password):
+    """对密码进行哈希加密"""
+    return hashlib.sha256(password.encode('utf-8')).hexdigest()
+
 def load_users():
     """从文件中加载用户信息，若文件不存在则创建默认管理员账户。"""
     if os.path.exists(users_file):
-        with open(users_file, 'r') as f:
-            users = json.load(f)
-            # 添加 is_banned 和 ban_end_time 字段，如果这些字段不存在
-            for user in users.values():
-                if 'is_banned' not in user:
-                    user['is_banned'] = False
-                if 'ban_end_time' not in user:
-                    user['ban_end_time'] = None
-            return users
+        try:
+            with open(users_file, 'r') as f:
+                users = json.load(f)
+                # 添加 is_banned 和 ban_end_time 字段，如果这些字段不存在
+                for user in users.values():
+                    if 'is_banned' not in user:
+                        user['is_banned'] = False
+                    if 'ban_end_time' not in user:
+                        user['ban_end_time'] = None
+                return users
+        except (FileNotFoundError, json.JSONDecodeError):
+            print("用户文件读取失败，创建新的用户数据文件...")
+            return {}
     else:
         admin_info = {
             'username': 'admin',
-            'password': '123456',
+            'password': hash_password('123456'),
             'is_admin': True,
             'messages': [],
             'inbox': [],
@@ -48,7 +57,7 @@ def register(users):
         uid = str(uuid.uuid4())
         users[uid] = {
             'username': username,
-            'password': password,
+            'password': hash_password(password),
             'is_admin': False,
             'messages': [],
             'inbox': [],
@@ -76,7 +85,7 @@ def login(users):
                         print("登录失败，用户被封号！")
                         return None
                 password = input("请输入密码：")
-                if uid in users and users[uid]['password'] == password:
+                if users[uid]['password'] == hash_password(password):
                     return uid
                 else:
                     print("登录失败，UID或密码错误！")
@@ -98,7 +107,7 @@ def login(users):
                         else:
                             print("登录失败，用户被封号！")
                             return None
-                    if user_info['password'] == password:
+                    if user_info['password'] == hash_password(password):
                         return user_uid
             print("登录失败，用户名或密码错误！")
             return None
@@ -109,9 +118,9 @@ def change_password(users, uid):
     """修改密码，验证旧密码是否正确。"""
     while True:
         old_password = input("请输入旧密码：")
-        if users[uid]['password'] == old_password:
+        if users[uid]['password'] == hash_password(old_password):
             new_password = input("请输入新密码：")
-            users[uid]['password'] = new_password
+            users[uid]['password'] = hash_password(new_password)
             save_users(users)
             print("密码修改成功！")
             return
@@ -132,9 +141,12 @@ def promote_to_admin(users):
     """提升用户为管理员，确认UID存在。"""
     uid = input("请输入要提升为管理员的用户的UID：")
     if uid in users:
-        users[uid]['is_admin'] = True
-        save_users(users)
-        print("用户已提升为管理员！")
+        if users[uid]['is_admin']:
+            print("该用户已经是管理员！")
+        else:
+            users[uid]['is_admin'] = True
+            save_users(users)
+            print("用户已成功提升为管理员！")
     else:
         print("用户不存在！")
 
@@ -154,13 +166,19 @@ def send_message(users, sender_uid):
 
 def delete_message(users, uid):
     """删除留言，确认留言存在。"""
-    message_index = int(input("请输入要删除的留言的序号：")) - 1
-    if 0 <= message_index < len(users[uid]['inbox']):
-        del users[uid]['inbox'][message_index]
-        save_users(users)
-        print("留言删除成功！")
-    else:
-        print("留言不存在！")
+    if len(users[uid]['inbox']) == 0:
+        print("没有留言可以删除！")
+        return
+    try:
+        message_index = int(input("请输入要删除的留言的序号：")) - 1
+        if 0 <= message_index < len(users[uid]['inbox']):
+            del users[uid]['inbox'][message_index]
+            save_users(users)
+            print("留言删除成功！")
+        else:
+            print("留言序号无效！")
+    except ValueError:
+        print("请输入有效的数字序号！")
 
 def show_messages(users, uid):
     """查看留言，确认留言存在。"""
@@ -177,16 +195,16 @@ def ban_user(users):
     uid = input("请输入要封号的用户的UID：")
     if uid in users:
         while True:
-            ban_end_time = input("请输入封号结束时间（格式：YYYY-MM-DD HH:MM:SS）：")
             try:
+                ban_end_time = input("请输入封号结束时间（格式：YYYY-MM-DD HH:MM:SS）：")
                 ban_end_time = datetime.datetime.strptime(ban_end_time, '%Y-%m-%d %H:%M:%S')
                 users[uid]['is_banned'] = True
                 users[uid]['ban_end_time'] = ban_end_time
                 save_users(users)
                 print("用户已封号！")
-                return
+                break
             except ValueError:
-                print("无效的时间格式！")
+                print("无效的时间格式，请重新输入！")
     else:
         print("用户不存在！")
 
@@ -226,92 +244,52 @@ def show_admin_menu(users, uid):
             send_message(users, uid)
         elif choice == "4":
             for user_uid, user_info in users.items():
-                print(f"用户 {user_info['username']} 的留言：")
-                show_messages(users, user_uid)
+                                print(f"用户 {user_info['username']} 的留言：")
+                for message in user_info['inbox']:
+                    print(f"  - 来自 {message['sender']} 的留言：{message['message']}")
         elif choice == "5":
             show_messages(users, uid)
         elif choice == "6":
-            username = input("请输入新的用户名：")
-            password = input("请输入新的密码：")
-            uid = str(uuid.uuid4())
-            users[uid] = {
-                'username': username,
-                'password': password,
-                'is_admin': False,
-                'messages': [],
-                'inbox': [],
-                'is_banned': False,
-                'ban_end_time': None
-            }
-            save_users(users)
-            print("预创建账户成功！")
+            # 创建新账户
+            register(users)
         elif choice == "7":
             ban_user(users)
         elif choice == "8":
             unban_user(users)
         elif choice == "9":
-            print("返回主菜单。")
             break
         else:
             print("无效的选项，请重新输入！")
 
-def show_user_menu(users, uid):
-    """用户菜单，提供查看留言、发送留言和删除留言的选项。"""
-    while True:
-        print("\n请选择操作：")
-        print("1. 查看留言")
-        print("2. 发送留言")
-        print("3. 删除留言")
-        print("4. 返回主菜单")
-        choice = input("请输入选项（1/2/3/4）：")
-        if choice == "1":
-            show_messages(users, uid)
-        elif choice == "2":
-            send_message(users, uid)
-        elif choice == "3":
-            delete_message(users, uid)
-        elif choice == "4":
-            print("返回主菜单。")
-            break
-        else:
-            print("无效的选项，请重新输入！")
-
-def show_menu():
-    """主菜单，提供登录、注册、修改密码和退出的选项。"""
+def main():
+    """主程序入口"""
     users = load_users()
+
     while True:
-        print("\n请选择操作：")
+        print("\n欢迎来到系统，请选择操作：")
         print("1. 登录")
         print("2. 注册")
-        print("3. 修改密码")
-        print("4. 退出")
-        choice = input("请输入选项（1/2/3/4）：")
-        if choice == "1":
+        print("3. 退出")
+        choice = input("请输入选项（1/2/3）：")
+
+        if choice == '1':
             uid = login(users)
             if uid:
+                print(f"欢迎 {users[uid]['username']}！")
                 if users[uid]['is_admin']:
                     show_admin_menu(users, uid)
                 else:
-                    show_user_menu(users, uid)
-        elif choice == "2":
-            register(users)
-        elif choice == "3":
-            uid = input("请输入UID：")
-            if uid in users:
-                change_password(users, uid)
+                    print("你是普通用户，无法访问管理员功能。")
             else:
-                print("UID不存在！")
-        elif choice == "4":
-            print("退出系统。")
+                print("登录失败！")
+        elif choice == '2':
+            uid = register(users)
+            print(f"注册成功，UID：{uid}")
+        elif choice == '3':
+            print("退出系统，感谢使用！")
             break
         else:
-            print("无效的选项，请重新输入！")
+            print("无效的选项，请重新选择！")
 
 if __name__ == "__main__":
-    show_menu()
-"""
-this a py
-It's by AkinRain5828258 when study atmiddle school
-THANK FOR YOU USE MU PY
-Wishing you a good morning, a good noon, and a good evening
-"""
+    main()
